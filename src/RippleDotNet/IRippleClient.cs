@@ -597,27 +597,39 @@ namespace RippleDotNet
             var taskInfoResult = tasks.TryGetValue(response.Id, out var taskInfo);
             if (taskInfoResult == false) throw new Exception("Task not found");
 
-            if (response.Status == "success")
+            try
             {
-                var deserialized = JsonConvert.DeserializeObject(response.Result.ToString(), taskInfo.Type, serializerSettings);
-
-                var setResult = taskInfo.TaskCompletionResult.GetType().GetMethod("SetResult");
-                setResult.Invoke(taskInfo.TaskCompletionResult, new[] { deserialized });
-
-                if (taskInfo.RemoveUponCompletion)
+                if (response.Status == "success")
                 {
+                    var deserialized = JsonConvert.DeserializeObject(response.Result.ToString(), taskInfo.Type, serializerSettings);
+
+                    var setResult = taskInfo.TaskCompletionResult.GetType().GetMethod("SetResult");
+                    setResult.Invoke(taskInfo.TaskCompletionResult, new[] { deserialized });
+
+                    if (taskInfo.RemoveUponCompletion)
+                    {
+                        tasks.TryRemove(response.Id, out taskInfo);
+                    }
+                }
+                else if (response.Status == "error")
+                {
+                    var setException = taskInfo.TaskCompletionResult.GetType().GetMethod("SetException", new Type[] { typeof(Exception) }, null);
+
+                    RippleException exception = new RippleException(response.Error);
+                    setException.Invoke(taskInfo.TaskCompletionResult, new[] { exception });
+
                     tasks.TryRemove(response.Id, out taskInfo);
                 }
             }
-            else if (response.Status == "error")
+            catch (Exception ex)
             {
-                var setException = taskInfo.TaskCompletionResult.GetType().GetMethod("SetException", new Type[]{typeof(Exception)}, null);
+                var setException = taskInfo.TaskCompletionResult.GetType().GetMethod("SetException", new Type[] { typeof(Exception) }, null);
 
-                RippleException exception = new RippleException(response.Error);
+                RippleException exception = new RippleException(ex.Message);
                 setException.Invoke(taskInfo.TaskCompletionResult, new[] { exception });
 
                 tasks.TryRemove(response.Id, out taskInfo);
-            }                        
+            }                  
         }        
     }
 }
